@@ -29,8 +29,8 @@ int main()
 		cout << "main: Exiting the block\n";
 	}
 	/* Objects dynamically allocated with new, don't get
-	 * out-of-scope. That b_ptr, does though, causing a memory
-	 * leak in this case */
+	 * out-of-scope. They are explicitly freed with delete
+	 */
 	cout << "main: Exited the block\n";
 	return 0;
 }
