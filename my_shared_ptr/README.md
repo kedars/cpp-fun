@@ -1,0 +1,2 @@
+As a C++ newbie, doing a shared pointer was interesting, since it exposes to multiple C++ ways of things like templates, operator overloading, lock_guard. Good learning.
+There may be some newbie issues here, if so, please let me know.
