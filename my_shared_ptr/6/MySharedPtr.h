@@ -58,6 +58,12 @@ class SharedPtrTable
         return mPtr;
     }
 
+    int getCnt()
+    {
+        const lock_guard lock(mLock);
+        return mRefCnt;
+    }
+
     /* Return 'true' if self needs to be deleted */
     bool Put()
     {
@@ -76,6 +82,7 @@ template <typename T>
 class MySharedPtr
 {
 private:
+    std_mutex mLock;
     SharedPtrTable<T> *mSharedTable;
 
     void releaseSharedPtrTable()
@@ -103,12 +110,14 @@ public:
     /* Copy constructor */
     MySharedPtr(const MySharedPtr &oldVal)
     {
+        const lock_guard lock(mLock);
         mSharedTable = oldVal.mSharedTable->Take();
     }
 
     /* Assignment after construction */
     MySharedPtr &operator=(const MySharedPtr &rhs)
     {
+        const lock_guard lock(mLock);
         releaseSharedPtrTable();
         mSharedTable = rhs.mSharedTable->Take();
         return *this;
@@ -116,14 +125,36 @@ public:
 
     ~MySharedPtr()
     {
+        const lock_guard lock(mLock);
         releaseSharedPtrTable();
     }
 
     T *operator->()
     {
-        return mSharedTable->getPtr();
+        const lock_guard lock(mLock);
+        if (mSharedTable) {
+            return mSharedTable->getPtr();
+        }
+        return nullptr;
     }
 
+    T &operator*()
+    {
+        const lock_guard lock(mLock);
+        if (mSharedTable) {
+            return *(mSharedTable->getPtr());
+        }
+        return nullptr;
+    }
+
+    uint16_t getCnt()
+    {
+        const lock_guard lock(mLock);
+        if (mSharedTable) {
+            return mSharedTable->getCnt();
+        }
+        return 0;
+    }
 };
 
 #endif /* ! MY_SHARED_PTR_H_ */

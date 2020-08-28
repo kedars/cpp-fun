@@ -28,6 +28,9 @@ int main(void)
     }
     printf("After the block\n");
     ptr3->Print();
+    LargeObject test = *ptr3;
+    printf("Doing test.Print()\n");
+    test.Print();
     /* The ptr reference to LargeBlock 'b' should be dropped here */
     return 0;
 }
