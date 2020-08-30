@@ -10,8 +10,7 @@
  *   6 - Locking
  */
 
-#define MYSHAREDPTR_LOCKING 
-
+//#define MYSHAREDPTR_LOCKING 
 #ifdef MYSHAREDPTR_LOCKING
 
 #include <mutex>
@@ -27,35 +26,33 @@ struct lock_guard {
 
 #endif /* MYSHAREDPTR_LOCKING */
 
-/* This being a template will add to the .text section */
-template <typename T>
+//#define MYSHAREDPTR_REFCNT_DEBUG
+#ifdef MYSHAREDPTR_REFCNT_DEBUG
+#define refcnt_debug printf
+#else
+#define refcnt_debug(fmt, args...)
+#endif
+
 class SharedPtrTable
 {
  private:
-    T *mPtr;
     int mRefCnt;
     std_mutex mLock;
 
     /* Disable Copy Constructor */
     SharedPtrTable(SharedPtrTable &val) {}
  public:
-    explicit SharedPtrTable(T *ptr) : mPtr(ptr), mRefCnt(1)
+    explicit SharedPtrTable() : mRefCnt(1)
     {
-        printf("   %p refcnt:1\n", this);
+        refcnt_debug("   %p refcnt:1\n", this);
     }
 
     SharedPtrTable *Take()
     {
         const lock_guard lock(mLock);
         mRefCnt++;
-        printf("   %p refcnt:%d\n", this, mRefCnt);
+        refcnt_debug("   %p refcnt:%d\n", this, mRefCnt);
         return this;
-    }
-
-    T *getPtr()
-    {
-        const lock_guard lock(mLock);
-        return mPtr;
     }
 
     int getCnt()
@@ -68,36 +65,41 @@ class SharedPtrTable
     bool Put()
     {
         const lock_guard lock(mLock);
-        printf("   %p refcnt:%d\n", this, mRefCnt);
+        refcnt_debug("   %p refcnt:%d\n", this, mRefCnt);
         mRefCnt--;
         if (mRefCnt == 0) {
-            delete mPtr;
             return true;
         }
         return false;
     }
 };
 
+/* Note that while accesses to the SharedPtrTable are multi-thread
+ * safe, access to the MySharedPtr is not supposed to be multi-thread
+ * safe.
+ */
 template <typename T>
 class MySharedPtr
 {
 private:
-    std_mutex mLock;
-    SharedPtrTable<T> *mSharedTable;
+    T *mPtr;
+    SharedPtrTable *mSharedTable;
 
     void releaseSharedPtrTable()
     {
         if (mSharedTable) {
             if (mSharedTable->Put() == true) {
+                delete mPtr;
                 delete mSharedTable;
             }
         }
     }
 public:
     /* Initialise with a pre-allocated pointer */
-    explicit MySharedPtr(T *newPtr)
+    explicit MySharedPtr(T *newPtr) :
+        mPtr(newPtr)
     {
-        mSharedTable = new SharedPtrTable<T>(newPtr);
+        mSharedTable = new SharedPtrTable();
         if (!mSharedTable) {
             /* No exception environment */
             printf("Error!\n");
@@ -105,51 +107,44 @@ public:
     }
 
     /* Simple definition, no init */
-    explicit MySharedPtr() : mSharedTable{nullptr} {}
+    explicit MySharedPtr() :
+        mSharedTable{nullptr},
+        mPtr{nullptr}
+    {}
 
     /* Copy constructor */
     MySharedPtr(const MySharedPtr &oldVal)
     {
-        const lock_guard lock(mLock);
+        mPtr = oldVal.mPtr;
         mSharedTable = oldVal.mSharedTable->Take();
     }
 
     /* Assignment after construction */
     MySharedPtr &operator=(const MySharedPtr &rhs)
     {
-        const lock_guard lock(mLock);
         releaseSharedPtrTable();
+        mPtr = rhs.mPtr;
         mSharedTable = rhs.mSharedTable->Take();
         return *this;
     }
 
     ~MySharedPtr()
     {
-        const lock_guard lock(mLock);
         releaseSharedPtrTable();
     }
 
     T *operator->()
     {
-        const lock_guard lock(mLock);
-        if (mSharedTable) {
-            return mSharedTable->getPtr();
-        }
-        return nullptr;
+        return mPtr;
     }
 
     T &operator*()
     {
-        const lock_guard lock(mLock);
-        if (mSharedTable) {
-            return *(mSharedTable->getPtr());
-        }
-        return nullptr;
+        return mPtr;
     }
 
-    uint16_t getCnt()
+    int getCnt()
     {
-        const lock_guard lock(mLock);
         if (mSharedTable) {
             return mSharedTable->getCnt();
         }
